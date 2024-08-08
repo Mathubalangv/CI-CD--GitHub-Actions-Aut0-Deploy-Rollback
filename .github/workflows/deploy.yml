@@ -41,6 +41,12 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
 
+      - name: Run Integration Tests
+        run: |
+          cd myapp
+          npm run test:integration  # Ensure you have integration tests set up
+
+
       - name: Download task definition
         run: |
           aws ecs describe-task-definition --task-definition ${{ env.ECS_TASK_DEFINITION }} \
@@ -61,4 +67,16 @@ jobs:
           service: ${{ env.demo-service }}
           cluster: ${{ env.demo-cluster }}
           wait-for-service-stability: true
+
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          echo "Deployment failed. Rolling back."
+          # Rollback to the previous task definition if needed
+          PREVIOUS_TASK_DEFINITION=$(aws ecs list-task-definitions --sort DESC --max-items 2 --query "taskDefinitionArns[1]" --output text)
+          if [ -n "$PREVIOUS_TASK_DEFINITION" ]; then
+           aws ecs update-service --cluster demo-cluster --service demo-service --task-definition $PREVIOUS_TASK_DEFINITION
+          else
+           echo "No previous task definition found. Manual intervention required."
+          fi
 
